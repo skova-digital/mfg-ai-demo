@@ -9,7 +9,7 @@ binding = "ASSETS"
 [[d1_databases]]
 binding = "DB"
 database_name = "mfg_ai_demo"
-database_id = "placeholder-set-on-deploy"
+database_id = "5e58ef74-3a2e-4d24-9673-86035ef4aa6a"
 
 [vars]
 # live: Claude API を実呼び出し（ローカル開発のみ・ANTHROPIC_API_KEY は .dev.vars）
