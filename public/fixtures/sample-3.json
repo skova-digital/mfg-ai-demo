@@ -1,0 +1,22 @@
+{
+  "input_label": "帳票の記載内容（転記風）",
+  "input_text": "検査成績書\n品番: ST-520 / ロット: ST-260705B / 工程: 組立\n検査数: 40 不良: 1（汚れ・洗浄で除去可）\n代表寸法: 52.05 (規格 51.7-52.3)\n判定: 合格　検査者: 井上",
+  "records": [
+    {
+      "recorded_at": null,
+      "product_code": "ST-520",
+      "lot_no": "ST-260705B",
+      "process": "assembly",
+      "inspector": "井上",
+      "qty_inspected": 40,
+      "qty_defect": 1,
+      "defect_type": "stain",
+      "measurement": 52.05,
+      "judgement": "pass",
+      "note": "汚れ1個・洗浄で除去可。帳票判定は合格"
+    }
+  ],
+  "questions": [
+    "帳票に検査日の記載が見当たりませんでした"
+  ]
+}

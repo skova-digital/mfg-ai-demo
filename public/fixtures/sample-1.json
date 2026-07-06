@@ -1,0 +1,20 @@
+{
+  "input_label": "口語の日報テキスト",
+  "input_text": "7/6 MK-1024 ロットMK-260706A、切削上がり50個検査。2個バリあり、うち1個は限度見本ギリだったので要確認にまわす。残りはOK。田中",
+  "records": [
+    {
+      "recorded_at": "2026-07-06",
+      "product_code": "MK-1024",
+      "lot_no": "MK-260706A",
+      "process": "cutting",
+      "inspector": "田中",
+      "qty_inspected": 50,
+      "qty_defect": 2,
+      "defect_type": "burr",
+      "measurement": null,
+      "judgement": "recheck",
+      "note": "バリ2個。うち1個は限度見本ギリのため要確認"
+    }
+  ],
+  "questions": []
+}

@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ダッシュボード | 検査記録AI デモ</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<header class="site">
+  <h1>検査記録AI デモ</h1>
+  <span class="demo-badge">架空データによるデモ</span>
+  <nav aria-label="メインナビゲーション">
+    <a href="/">入力</a>
+    <a href="/dashboard.html" aria-current="page">ダッシュボード</a>
+  </nav>
+</header>
+<main>
+  <h2>品質ダッシュボード</h2>
+  <p class="lead">蓄積された検査記録から、不良の傾向を可視化します。<span id="saved-note" style="color: var(--ok); font-weight: 700;"></span></p>
+
+  <div class="kpis" id="kpis" aria-label="直近28日の主要指標"></div>
+
+  <div class="grid2">
+    <div class="card">
+      <h3 style="font-size:1rem; margin-bottom:0.75rem;">週次不良率の推移</h3>
+      <div id="c-weekly"></div>
+    </div>
+    <div class="card">
+      <h3 style="font-size:1rem; margin-bottom:0.75rem;">不良分類の内訳（総数）</h3>
+      <div id="c-defect"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 style="font-size:1rem; margin-bottom:0.25rem;">品番 × 工程の不良率</h3>
+    <p style="font-size:0.8rem; color:var(--muted); margin-bottom:0.75rem;">濃い赤ほど不良率が高い。どこに問題が集中しているかが一目で分かります。</p>
+    <div class="table-wrap" id="c-matrix"></div>
+  </div>
+
+  <div class="card">
+    <h3 style="font-size:1rem; margin-bottom:0.75rem;">直近の「要確認」レコード</h3>
+    <div class="table-wrap" id="c-recheck"></div>
+  </div>
+</main>
+<footer class="site">検査記録AI デモ — 架空の業務設定・生成データによるポートフォリオ作品です</footer>
+<script>
+const PROC_JA = { cutting: "切削", grinding: "研磨", assembly: "組立", final: "出荷前" };
+const DEF_JA = { dimension: "寸法", scratch: "キズ", burr: "バリ", stain: "汚れ", other: "その他" };
+const pct = (d, n) => (n ? (100 * d / n) : 0);
+const fmtPct = (v) => v.toFixed(1) + "%";
+
+const saved = new URLSearchParams(location.search).get("saved");
+if (saved) document.getElementById("saved-note").textContent = `${saved}件を保存しました。`;
+
+(async () => {
+  const res = await fetch("/api/stats");
+  const s = await res.json();
+
+  // KPI
+  const rate = pct(s.kpi.defects || 0, s.kpi.inspected || 0);
+  document.getElementById("kpis").innerHTML = `
+    <div class="kpi"><div class="v">${(s.kpi.inspected || 0).toLocaleString()}</div><div class="l">検査数（直近28日）</div></div>
+    <div class="kpi"><div class="v${rate > 3 ? " bad" : ""}">${fmtPct(rate)}</div><div class="l">不良率（直近28日）</div></div>
+    <div class="kpi"><div class="v">${(s.kpi.defects || 0).toLocaleString()}</div><div class="l">不良数（直近28日）</div></div>
+    <div class="kpi"><div class="v${(s.kpi.rechecks || 0) > 0 ? " bad" : ""}">${s.kpi.rechecks || 0}</div><div class="l">要確認（未処理・直近28日）</div></div>`;
+
+  // 週次折れ線（SVG）
+  const wk = s.weekly.filter((w) => w.inspected > 0);
+  if (wk.length >= 2) {
+    const W = 440, H = 220, PAD = { l: 44, r: 12, t: 12, b: 30 };
+    const rates = wk.map((w) => pct(w.defects, w.inspected));
+    const maxY = Math.max(5, Math.ceil(Math.max(...rates)) + 1);
+    const x = (i) => PAD.l + (i * (W - PAD.l - PAD.r)) / (wk.length - 1);
+    const y = (v) => H - PAD.b - (v / maxY) * (H - PAD.t - PAD.b);
+    const pts = rates.map((v, i) => `${x(i)},${y(v)}`).join(" ");
+    let grid = "";
+    for (let g = 0; g <= maxY; g += Math.ceil(maxY / 4)) {
+      grid += `<line x1="${PAD.l}" y1="${y(g)}" x2="${W - PAD.r}" y2="${y(g)}" stroke="#e3e8ef"/>
+               <text x="${PAD.l - 6}" y="${y(g) + 4}" text-anchor="end" font-size="10" fill="#4a5568">${g}%</text>`;
+    }
+    const labels = wk.map((w, i) => (i % Math.ceil(wk.length / 6) === 0)
+      ? `<text x="${x(i)}" y="${H - 8}" text-anchor="middle" font-size="9" fill="#4a5568">${w.week_start.slice(5)}</text>` : "").join("");
+    const dots = rates.map((v, i) => `<circle cx="${x(i)}" cy="${y(v)}" r="3" fill="#2d4a6e"/>`).join("");
+    document.getElementById("c-weekly").innerHTML =
+      `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="週次不良率の折れ線グラフ。直近で上昇傾向。" style="width:100%;height:auto;">
+        ${grid}<polyline points="${pts}" fill="none" stroke="#2d4a6e" stroke-width="2"/>${dots}${labels}</svg>`;
+  }
+
+  // 不良分類 横棒（SVG）
+  const bd = s.by_defect;
+  if (bd.length) {
+    const W = 440, rowH = 34, H = bd.length * rowH + 8;
+    const maxV = Math.max(...bd.map((d) => d.defects));
+    const bars = bd.map((d, i) => {
+      const w = Math.max(4, (d.defects / maxV) * (W - 150));
+      const yy = i * rowH + 8;
+      return `<text x="66" y="${yy + 14}" text-anchor="end" font-size="11" fill="#1a2332">${DEF_JA[d.defect_type] || d.defect_type}</text>
+              <rect x="74" y="${yy}" width="${w}" height="20" rx="3" fill="#3d6a9e"/>
+              <text x="${74 + w + 6}" y="${yy + 14}" font-size="11" fill="#4a5568">${d.defects}</text>`;
+    }).join("");
+    document.getElementById("c-defect").innerHTML =
+      `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="不良分類別の件数横棒グラフ" style="width:100%;height:auto;">${bars}</svg>`;
+  }
+
+  // 品番×工程 ヒートマップ表
+  const products = [...new Set(s.matrix.map((m) => m.product_code))].sort();
+  const procs = ["cutting", "grinding", "assembly", "final"];
+  const cellMap = {};
+  s.matrix.forEach((m) => { cellMap[`${m.product_code}|${m.process}`] = m; });
+  let html = `<table class="rec"><thead><tr><th>品番</th>${procs.map((p) => `<th>${PROC_JA[p]}</th>`).join("")}</tr></thead><tbody>`;
+  for (const pd of products) {
+    html += `<tr><th>${pd}</th>`;
+    for (const pr of procs) {
+      const m = cellMap[`${pd}|${pr}`];
+      if (!m || !m.inspected) { html += `<td style="color:#8a93a2;">—</td>`; continue; }
+      const r = pct(m.defects, m.inspected);
+      const alpha = Math.min(0.85, r / 12);
+      const strong = r >= 6;
+      html += `<td style="background: rgba(179,38,30,${alpha.toFixed(2)}); ${strong ? "color:#fff; font-weight:700;" : ""}">${fmtPct(r)}</td>`;
+    }
+    html += "</tr>";
+  }
+  html += "</tbody></table>";
+  document.getElementById("c-matrix").innerHTML = html;
+
+  // recheck 一覧
+  const rc = s.rechecks;
+  document.getElementById("c-recheck").innerHTML = rc.length
+    ? `<table class="rec"><thead><tr><th>検査日</th><th>品番</th><th>ロット</th><th>工程</th><th>数量</th><th>不良</th><th>コメント</th></tr></thead><tbody>${
+        rc.map((r) => `<tr><td>${r.recorded_at}</td><td>${r.product_code}</td><td>${r.lot_no}</td><td>${PROC_JA[r.process]}</td><td>${r.qty_inspected}</td><td>${r.qty_defect}${r.defect_type ? `（${DEF_JA[r.defect_type]}）` : ""}</td><td>${r.note || ""}</td></tr>`).join("")
+      }</tbody></table>`
+    : `<p style="font-size:0.875rem; color:var(--muted);">要確認のレコードはありません。</p>`;
+})().catch(() => {
+  document.getElementById("kpis").innerHTML = `<div class="error-box" role="alert">データの取得に失敗しました。ローカル実行の場合は D1 の初期化（README 参照）をご確認ください。</div>`;
+});
+</script>
+</body>
+</html>

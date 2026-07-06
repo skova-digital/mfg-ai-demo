@@ -1,0 +1,37 @@
+{
+  "input_label": "走り書き風（複数件・情報欠け）",
+  "input_text": "きのう分まとめ。ST-410 研磨 80個中3個寸法アウト(40.25) 上限超え。あとMK-3072の出荷前 60個 問題なし。ロット番号あとで確認する",
+  "records": [
+    {
+      "recorded_at": null,
+      "product_code": "ST-410",
+      "lot_no": null,
+      "process": "grinding",
+      "inspector": null,
+      "qty_inspected": 80,
+      "qty_defect": 3,
+      "defect_type": "dimension",
+      "measurement": 40.25,
+      "judgement": "fail",
+      "note": "寸法アウト3個（40.25・上限超え）"
+    },
+    {
+      "recorded_at": null,
+      "product_code": "MK-3072",
+      "lot_no": null,
+      "process": "final",
+      "inspector": null,
+      "qty_inspected": 60,
+      "qty_defect": 0,
+      "defect_type": null,
+      "measurement": null,
+      "judgement": "pass",
+      "note": "問題なし"
+    }
+  ],
+  "questions": [
+    "「きのう」の具体的な日付を確認してください（検査日欄）",
+    "ST-410 と MK-3072 のロット番号が読み取れませんでした",
+    "検査員名の記載がありません"
+  ]
+}

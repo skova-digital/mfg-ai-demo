@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>確認・修正 | 検査記録AI デモ</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<header class="site">
+  <h1>検査記録AI デモ</h1>
+  <span class="demo-badge">架空データによるデモ</span>
+  <nav aria-label="メインナビゲーション">
+    <a href="/">入力</a>
+    <a href="/dashboard.html">ダッシュボード</a>
+  </nav>
+</header>
+<main>
+  <h2>AI の下書きを確認してください</h2>
+  <p class="lead">AI が抽出した内容です。<strong>黄色のセルは AI が自信を持てなかった項目</strong>です。修正・補完してから保存してください（確定するのは人です）。</p>
+
+  <div id="qbox" class="q-list" hidden>
+    <strong style="display:block; margin-bottom:0.25rem;">AI からの確認事項</strong>
+    <ul id="qs" style="margin-left: 0.5rem;"></ul>
+  </div>
+
+  <div class="card">
+    <div class="table-wrap">
+      <table class="rec" id="tbl" aria-label="抽出された検査記録の確認・修正">
+        <thead>
+          <tr>
+            <th>検査日<span aria-hidden="true">*</span></th><th>品番<span aria-hidden="true">*</span></th><th>ロット</th><th>工程<span aria-hidden="true">*</span></th><th>検査員</th>
+            <th>検査数<span aria-hidden="true">*</span></th><th>不良数</th><th>不良分類</th><th>実測値</th><th>判定<span aria-hidden="true">*</span></th><th>コメント</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div id="err" class="error-box" role="alert" hidden></div>
+    <p style="margin-top: 1rem; display: flex; gap: 0.75rem; flex-wrap: wrap;">
+      <button class="btn" id="save">確認して保存する</button>
+      <a class="btn btn-ghost" href="/">入力に戻る</a>
+    </p>
+  </div>
+</main>
+<footer class="site">検査記録AI デモ — 架空の業務設定・生成データによるポートフォリオ作品です</footer>
+<script>
+const PROCESS_OPTS = { cutting: "切削", grinding: "研磨", assembly: "組立", final: "出荷前" };
+const DEFECT_OPTS = { "": "（なし）", dimension: "寸法", scratch: "キズ", burr: "バリ", stain: "汚れ", other: "その他" };
+const JUDGE_OPTS = { pass: "合格", fail: "不合格", recheck: "要確認" };
+const $ = (s) => document.querySelector(s);
+
+const raw = sessionStorage.getItem("extract_result");
+if (!raw) location.replace("/");
+const data = JSON.parse(raw || "{}");
+
+if ((data.questions || []).length) {
+  $("#qbox").hidden = false;
+  for (const q of data.questions) {
+    const li = document.createElement("li");
+    li.textContent = q;
+    $("#qs").appendChild(li);
+  }
+}
+
+const tbody = document.querySelector("#tbl tbody");
+const today = new Date().toISOString().slice(0, 10);
+
+function cell(el, uncertain) {
+  const td = document.createElement("td");
+  if (uncertain) td.className = "hl";
+  td.appendChild(el);
+  return td;
+}
+const inp = (type, value, attrs = {}) => {
+  const el = document.createElement("input");
+  el.type = type;
+  el.value = value ?? "";
+  Object.entries(attrs).forEach(([k, v]) => el.setAttribute(k, v));
+  return el;
+};
+const sel = (opts, value) => {
+  const el = document.createElement("select");
+  for (const [v, label] of Object.entries(opts)) {
+    const o = document.createElement("option");
+    o.value = v; o.textContent = label;
+    if (v === (value ?? "")) o.selected = true;
+    el.appendChild(o);
+  }
+  return el;
+};
+
+for (const r of data.records || []) {
+  const tr = document.createElement("tr");
+  tr.appendChild(cell(inp("date", r.recorded_at || today), r.recorded_at == null));
+  tr.appendChild(cell(inp("text", r.product_code, { "aria-label": "品番" }), r.product_code == null));
+  tr.appendChild(cell(inp("text", r.lot_no, { "aria-label": "ロット" }), r.lot_no == null));
+  tr.appendChild(cell(sel(PROCESS_OPTS, r.process), r.process == null));
+  tr.appendChild(cell(inp("text", r.inspector, { "aria-label": "検査員" }), r.inspector == null));
+  tr.appendChild(cell(inp("number", r.qty_inspected, { min: 1 }), r.qty_inspected == null));
+  tr.appendChild(cell(inp("number", r.qty_defect ?? 0, { min: 0 }), r.qty_defect == null));
+  tr.appendChild(cell(sel(DEFECT_OPTS, r.defect_type), false));
+  tr.appendChild(cell(inp("number", r.measurement, { step: "0.001" }), false));
+  tr.appendChild(cell(sel(JUDGE_OPTS, r.judgement || "recheck"), r.judgement == null));
+  tr.appendChild(cell(inp("text", r.note, { "aria-label": "コメント" }), false));
+  tbody.appendChild(tr);
+}
+
+$("#save").addEventListener("click", async () => {
+  const err = $("#err");
+  err.hidden = true;
+  const records = [...tbody.querySelectorAll("tr")].map((tr) => {
+    const f = tr.querySelectorAll("input, select");
+    return {
+      recorded_at: f[0].value,
+      product_code: f[1].value.trim(),
+      lot_no: f[2].value.trim() || null,
+      process: f[3].value,
+      inspector: f[4].value.trim() || null,
+      qty_inspected: parseInt(f[5].value, 10),
+      qty_defect: parseInt(f[6].value || "0", 10),
+      defect_type: f[7].value || null,
+      measurement: f[8].value === "" ? null : parseFloat(f[8].value),
+      judgement: f[9].value,
+      note: f[10].value.trim() || null,
+      source_type: "sample",
+    };
+  });
+  $("#save").disabled = true;
+  try {
+    const res = await fetch("/api/records", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ records }),
+    });
+    const out = await res.json();
+    if (!res.ok) { err.textContent = out.error || "保存に失敗しました。"; err.hidden = false; return; }
+    sessionStorage.removeItem("extract_result");
+    location.href = "/dashboard.html?saved=" + out.saved;
+  } catch {
+    err.textContent = "通信に失敗しました。";
+    err.hidden = false;
+  } finally {
+    $("#save").disabled = false;
+  }
+});
+</script>
+</body>
+</html>

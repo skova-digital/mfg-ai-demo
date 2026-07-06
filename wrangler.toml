@@ -1,0 +1,17 @@
+name = "mfg-ai-demo"
+main = "src/worker.js"
+compatibility_date = "2026-06-01"
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "mfg_ai_demo"
+database_id = "placeholder-set-on-deploy"
+
+[vars]
+# live: Claude API を実呼び出し（ローカル開発のみ・ANTHROPIC_API_KEY は .dev.vars）
+# sample: fixtures の事前実行済みレスポンスを返す（公開時の固定値・API費用ゼロ）
+EXTRACT_MODE = "sample"
