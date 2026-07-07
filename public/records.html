@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>記録一覧 | 検査記録AI デモ</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<header class="site">
+  <h1>検査記録AI デモ</h1>
+  <span class="demo-badge">架空データによるデモ</span>
+  <nav aria-label="メインナビゲーション">
+    <a href="/">入力</a>
+    <a href="/records.html" aria-current="page">記録一覧</a>
+    <a href="/dashboard.html">ダッシュボード</a>
+  </nav>
+</header>
+<main>
+  <h2>検査記録の検索</h2>
+  <p class="lead">品番・工程・期間で過去実績をすぐ引き出せます。紙の伝票の山から発掘する必要はありません。</p>
+
+  <div class="card">
+    <form id="filters" style="display:flex; gap:0.75rem; flex-wrap:wrap; align-items:flex-end; margin-bottom:1rem;">
+      <div>
+        <label for="f-from">期間（から）</label>
+        <input type="date" id="f-from">
+      </div>
+      <div>
+        <label for="f-to">期間（まで）</label>
+        <input type="date" id="f-to">
+      </div>
+      <div>
+        <label for="f-process">工程</label>
+        <select id="f-process">
+          <option value="">すべて</option>
+          <option value="cutting">切削</option>
+          <option value="grinding">研磨</option>
+          <option value="assembly">組立</option>
+          <option value="final">出荷前</option>
+        </select>
+      </div>
+      <div>
+        <label for="f-judgement">判定</label>
+        <select id="f-judgement">
+          <option value="">すべて</option>
+          <option value="pass">合格</option>
+          <option value="fail">不合格</option>
+          <option value="recheck">要確認</option>
+        </select>
+      </div>
+      <button class="btn" type="submit">検索</button>
+    </form>
+    <div style="margin-bottom:1rem;">
+      <label for="f-q">品番・ロットで絞り込み（表示中の記録から）</label>
+      <input type="text" id="f-q" placeholder="例: MK-2048" style="max-width:16rem;">
+    </div>
+    <div id="err" class="error-box" role="alert" hidden></div>
+    <p class="lead" id="count"></p>
+    <div class="table-wrap">
+      <table class="rec" id="tbl" aria-label="検査記録の一覧" hidden>
+        <thead>
+          <tr>
+            <th>検査日</th><th>品番</th><th>ロット</th><th>工程</th><th>検査員</th>
+            <th>検査数</th><th>不良数</th><th>不良分類</th><th>実測値</th><th>判定</th><th>コメント</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <p id="empty" style="font-size:0.875rem; color:var(--muted);" hidden>該当する記録はありません。</p>
+  </div>
+</main>
+<footer class="site">検査記録AI デモ — 架空の業務設定・生成データによるポートフォリオ作品です</footer>
+<script>
+const PROC_JA = { cutting: "切削", grinding: "研磨", assembly: "組立", final: "出荷前" };
+const DEF_JA = { dimension: "寸法", scratch: "キズ", burr: "バリ", stain: "汚れ", other: "その他" };
+const JUDGE_JA = { pass: "合格", fail: "不合格", recheck: "要確認" };
+const $ = (s) => document.querySelector(s);
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+let rows = [];
+
+function render() {
+  const q = $("#f-q").value.trim().toLowerCase();
+  const shown = q
+    ? rows.filter((r) => (r.product_code || "").toLowerCase().includes(q) || (r.lot_no || "").toLowerCase().includes(q))
+    : rows;
+  $("#count").textContent = shown.length
+    ? `${shown.length}件を表示中（最新200件まで検索対象）`
+    : "";
+  $("#tbl").hidden = shown.length === 0;
+  $("#empty").hidden = shown.length !== 0;
+  $("#tbl tbody").innerHTML = shown.map((r) => `
+    <tr>
+      <td>${esc(r.recorded_at)}</td>
+      <td>${esc(r.product_code)}</td>
+      <td>${esc(r.lot_no)}</td>
+      <td>${PROC_JA[r.process] || esc(r.process)}</td>
+      <td>${esc(r.inspector)}</td>
+      <td>${Number(r.qty_inspected) || 0}</td>
+      <td>${Number(r.qty_defect) || 0}</td>
+      <td>${r.defect_type ? (DEF_JA[r.defect_type] || esc(r.defect_type)) : "—"}</td>
+      <td>${r.measurement ?? "—"}</td>
+      <td><span class="judge ${esc(r.judgement)}">${JUDGE_JA[r.judgement] || esc(r.judgement)}</span></td>
+      <td>${esc(r.note || "")}</td>
+    </tr>`).join("");
+}
+
+async function load() {
+  const err = $("#err");
+  err.hidden = true;
+  const p = new URLSearchParams();
+  if ($("#f-from").value) p.set("from", $("#f-from").value);
+  if ($("#f-to").value) p.set("to", $("#f-to").value);
+  if ($("#f-process").value) p.set("process", $("#f-process").value);
+  if ($("#f-judgement").value) p.set("judgement", $("#f-judgement").value);
+  try {
+    const res = await fetch(`/api/records?${p}`);
+    const data = await res.json();
+    if (!res.ok) { err.textContent = data.error || "取得に失敗しました。"; err.hidden = false; return; }
+    rows = data.records || [];
+    render();
+  } catch {
+    err.textContent = "通信に失敗しました。ローカル実行の場合は D1 の初期化（README 参照）をご確認ください。";
+    err.hidden = false;
+  }
+}
+
+$("#filters").addEventListener("submit", (e) => { e.preventDefault(); load(); });
+$("#f-q").addEventListener("input", render);
+load();
+</script>
+</body>
+</html>
